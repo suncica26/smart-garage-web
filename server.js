@@ -7,19 +7,34 @@ const PORT = process.env.PORT || 3000;
 // memorija (za sada) - kasnije MongoDB
 const store = new Map();
 
+// poslednja komanda po uređaju (u memoriji)
+const lastCmd = new Map();
+
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
 app.use(express.json({ limit: "64kb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-// Dashboard
-app.get("/", (req, res) => {
-  res.render("index", { deviceId: "garage-01", lat: 44.815313, lng: 20.459812 });
+// ===== Health check (korisno na Renderu) =====
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    ts: Date.now(),
+    devices: store.size,
+  });
 });
 
-// poslednja komanda po uređaju (u memoriji)
-const lastCmd = new Map();
+// Dashboard
+app.get("/", (req, res) => {
+  res.render("index", {
+    deviceId: "garage-01",
+    lat: 44.815313,
+    lng: 20.459812,
+  });
+});
+
+// ===== Commands =====
 
 // web -> server (pošalji komandu)
 app.post("/api/cmd/:deviceId", (req, res) => {
@@ -29,6 +44,7 @@ app.post("/api/cmd/:deviceId", (req, res) => {
 
   lastCmd.set(deviceId, { cmd, ts: Date.now() });
   console.log("CMD:", deviceId, cmd);
+
   res.json({ ok: true });
 });
 
@@ -36,11 +52,14 @@ app.post("/api/cmd/:deviceId", (req, res) => {
 app.get("/api/cmd/:deviceId", (req, res) => {
   const deviceId = req.params.deviceId;
   const item = lastCmd.get(deviceId) || null;
-  // opcionalno: potroši komandu odmah
+
+  // potroši komandu odmah (da se ne ponavlja)
   lastCmd.delete(deviceId);
+
   res.json(item);
 });
 
+// ===== Telemetry =====
 
 // Pico -> server (POST)
 app.post("/api/telemetry/:deviceId", (req, res) => {
@@ -55,7 +74,7 @@ app.post("/api/telemetry/:deviceId", (req, res) => {
 
   store.set(deviceId, data);
 
-  console.log("TELEMETRY:", deviceId, data); // <-- videces odmah u CMD
+  console.log("TELEMETRY:", deviceId, data);
   res.json({ ok: true });
 });
 
@@ -65,4 +84,5 @@ app.get("/api/telemetry/:deviceId", (req, res) => {
   res.json(store.get(deviceId) || null);
 });
 
-app.listen(PORT, () => console.log(`Listening on :${PORT}`));
+// Render-safe bind
+app.listen(PORT, "0.0.0.0", () => console.log(`Listening on :${PORT}`));
