@@ -14,8 +14,19 @@
   <header class="topbar">
     <div>
       <h1>Smart Garage</h1>
-      <div class="muted">Uređaj: <b id="deviceId"><%= deviceId %></b></div>
+      <div class="muted">
+        Uređaj: <b id="deviceId"><%= deviceId %></b>
+      </div>
+
+      <% if (typeof username !== "undefined" && username) { %>
+        <div class="muted small" style="margin-top:6px;">
+          Ulogovan: <b><%= username %></b>
+          · <a href="/devices">Moji uređaji</a>
+          · <a href="/logout">Logout</a>
+        </div>
+      <% } %>
     </div>
+
     <div class="badge" id="statusBadge">Nema podataka</div>
   </header>
 
@@ -35,21 +46,20 @@
     </section>
 
     <section class="card">
-  <h2>Kontrole</h2>
+      <h2>Kontrole</h2>
 
-  <div class="kv" style="grid-template-columns: 1fr;">
-    <button class="btn" id="btnOpen">Otvori vrata</button>
-    <button class="btn" id="btnClose">Zatvori vrata</button>
+      <div class="kv" style="grid-template-columns: 1fr;">
+        <button class="btn" id="btnOpen">Otvori vrata</button>
+        <button class="btn" id="btnClose">Zatvori vrata</button>
 
-    <div style="height:10px"></div>
+        <div style="height:10px"></div>
 
-    <button class="btn" id="btnLedOn">LED ON</button>
-    <button class="btn" id="btnLedOff">LED OFF</button>
-  </div>
+        <button class="btn" id="btnLedOn">LED ON</button>
+        <button class="btn" id="btnLedOff">LED OFF</button>
+      </div>
 
-  <div class="muted small">Komande idu na uređaj (Pico) preko servera.</div>
-</section>
-
+      <div class="muted small">Komande idu na uređaj (Pico) preko servera.</div>
+    </section>
 
     <section class="card">
       <h2>Lokacija (demo)</h2>
@@ -58,13 +68,15 @@
     </section>
   </main>
 
+  <!-- SAFE config injection -->
   <script>
-    window.__CFG__ = {
-      deviceId: "<%= deviceId %>",
-      lat: <%= lat %>,
-      lng: <%= lng %>
-    };
+    window.__CFG__ = <%- JSON.stringify({
+      deviceId: deviceId,
+      lat: lat,
+      lng: lng
+    }) %>;
   </script>
+
   <script src="/app.js"></script>
 </body>
 </html>

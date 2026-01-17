@@ -25,7 +25,7 @@ let map, marker;
 
 function initMap() {
   const mapEl = el("map");
-  if (!mapEl || typeof L === "undefined") return; // ako leaflet nije učitan
+  if (!mapEl || typeof L === "undefined") return;
 
   const lat = Number(window.__CFG__?.lat ?? 44.815313);
   const lng = Number(window.__CFG__?.lng ?? 20.459812);
@@ -34,16 +34,17 @@ function initMap() {
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors',
+    attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
 
-  marker = L.marker([lat, lng]).addTo(map).bindPopup(`Uređaj: ${deviceId}`).openPopup();
+  marker = L.marker([lat, lng])
+    .addTo(map)
+    .bindPopup(`Uređaj: ${deviceId}`)
+    .openPopup();
 
-  // ponekad CSS/layout “sakrije” mapu dok se učitava — force reflow
   setTimeout(() => map.invalidateSize(), 200);
 }
 
-// inicijalizuj mapu tek kad se DOM učita
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initMap);
 } else {
@@ -51,12 +52,41 @@ if (document.readyState === "loading") {
 }
 
 /* =========================
+   SAFE JSON helper
+   ========================= */
+async function safeJson(r) {
+  const ct = r.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) return null;
+  try {
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
+/* =========================
    TELEMETRY REFRESH
    ========================= */
 async function refresh() {
   try {
-    const r = await fetch(`/api/telemetry/${encodeURIComponent(deviceId)}`);
-    const data = await r.json();
+    const r = await fetch(`/api/telemetry/${encodeURIComponent(deviceId)}`, {
+      credentials: "include", // bitno za session cookie
+    });
+
+    // Ako nisi ulogovana -> preusmeri na /login ili pokaži poruku
+    if (r.status === 401) {
+      setBadge(false, "Uloguj se");
+      // opciono: automatski preusmeri
+      // window.location.href = "/login";
+      return;
+    }
+
+    if (!r.ok) {
+      setBadge(false, `Greška (${r.status})`);
+      return;
+    }
+
+    const data = await safeJson(r);
 
     if (!data) {
       setBadge(false, "Nema podataka");
@@ -77,12 +107,6 @@ async function refresh() {
 
     const d = new Date(data.serverTs);
     el("last").textContent = d.toLocaleString();
-
-    // (opciono) ako kasnije budeš slala lat/lng kroz telemetry:
-    // if (map && data.lat && data.lng) {
-    //   marker.setLatLng([data.lat, data.lng]);
-    //   map.setView([data.lat, data.lng]);
-    // }
   } catch (e) {
     setBadge(false, "Greška");
   }
@@ -90,14 +114,34 @@ async function refresh() {
 
 refresh();
 setInterval(refresh, 1000);
+
+/* =========================
+   COMMANDS
+   ========================= */
 async function sendCmd(cmd) {
   try {
-    await fetch(`/api/cmd/${encodeURIComponent(deviceId)}`, {
+    const r = await fetch(`/api/cmd/${encodeURIComponent(deviceId)}`, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cmd })
+      body: JSON.stringify({ cmd }),
     });
-  } catch (e) {}
+
+    if (r.status === 401) {
+      setBadge(false, "Uloguj se");
+      return;
+    }
+
+    if (!r.ok) {
+      setBadge(false, `Cmd greška (${r.status})`);
+      return;
+    }
+
+    // možeš i kratko “potvrđeno”
+    setBadge(true, "Komanda poslata");
+  } catch (e) {
+    setBadge(false, "Cmd greška");
+  }
 }
 
 el("btnOpen")?.addEventListener("click", () => sendCmd("OPEN"));
