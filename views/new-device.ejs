@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="sr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Novi uređaj</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .row { display:grid; gap:10px; grid-template-columns:1fr; }
+    input { width:100%; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.2); color:#fff; }
+    label { font-size: 13px; opacity: .85; }
+    #qr { width:100%; max-width:360px; }
+    .hint { font-size: 12px; opacity: .8; }
+  </style>
+
+  <!-- QR scanner (radi u browseru telefona) -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Dodaj uređaj</h1>
+      <div class="muted">Ulogovan: <b><%= username %></b></div>
+    </div>
+    <div style="display:flex; gap:12px; align-items:center;">
+      <a class="btn" href="/devices">Nazad</a>
+      <a class="btn" href="/logout">Logout</a>
+    </div>
+  </header>
+
+  <main class="grid" style="grid-template-columns: 1fr;">
+    <section class="card">
+      <h2>1) QR skeniranje (opciono)</h2>
+      <div class="hint">Klikni “Start scan” i dozvoli kameru. QR treba da sadrži deviceId (npr. garage-01).</div>
+      <div style="margin:12px 0; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn" type="button" id="btnScan">Start scan</button>
+        <button class="btn" type="button" id="btnStop">Stop</button>
+      </div>
+      <div id="qr"></div>
+    </section>
+
+    <section class="card">
+      <h2>2) Forma</h2>
+      <form method="post" action="/devices/new" class="row">
+        <div>
+          <label>deviceId (sa kutije / QR)</label>
+          <input name="deviceId" id="deviceId" required />
+        </div>
+
+        <div>
+          <label>Naziv</label>
+          <input name="name" />
+        </div>
+
+        <div>
+          <label>Mesto (npr. Garaža)</label>
+          <input name="place" />
+        </div>
+
+        <div>
+          <label>Opis</label>
+          <input name="description" />
+        </div>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <div style="flex:1; min-width:180px;">
+            <label>Lat (auto sa telefona)</label>
+            <input name="lat" id="lat" />
+          </div>
+          <div style="flex:1; min-width:180px;">
+            <label>Lng (auto sa telefona)</label>
+            <input name="lng" id="lng" />
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <button class="btn" type="button" id="btnGeo">Uzmi moju lokaciju</button>
+          <span class="hint" id="geoMsg"></span>
+        </div>
+
+        <button class="btn" type="submit">Sačuvaj</button>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    // Geolokacija telefona
+    const geoMsg = document.getElementById("geoMsg");
+    document.getElementById("btnGeo").addEventListener("click", async () => {
+      geoMsg.textContent = "";
+      if (!navigator.geolocation) {
+        geoMsg.textContent = "Browser nema geolokaciju.";
+        return;
+      }
+      geoMsg.textContent = "Tražim lokaciju…";
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          document.getElementById("lat").value = pos.coords.latitude;
+          document.getElementById("lng").value = pos.coords.longitude;
+          geoMsg.textContent = "Lokacija upisana ✅";
+        },
+        (err) => {
+          geoMsg.textContent = "Nije dozvoljena lokacija / greška.";
+        },
+        { enableHighAccuracy: true, timeout: 12000 }
+      );
+    });
+
+    // QR scan
+    let qr;
+    const deviceIdInput = document.getElementById("deviceId");
+
+    document.getElementById("btnScan").addEventListener("click", async () => {
+      if (qr) return;
+      qr = new Html5Qrcode("qr");
+      try {
+        await qr.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: 250 },
+          (decodedText) => {
+            // očekujemo da je u QR-u sam deviceId ili URL koji sadrži deviceId na kraju
+            const txt = String(decodedText || "").trim();
+            const last = txt.includes("/") ? txt.split("/").pop() : txt;
+            deviceIdInput.value = last;
+            // auto stop
+            qr.stop().then(() => { qr.clear(); qr = null; }).catch(() => {});
+          }
+        );
+      } catch (e) {
+        qr = null;
+      }
+    });
+
+    document.getElementById("btnStop").addEventListener("click", async () => {
+      if (!qr) return;
+      try { await qr.stop(); } catch {}
+      try { qr.clear(); } catch {}
+      qr = null;
+    });
+  </script>
+</body>
+</html>

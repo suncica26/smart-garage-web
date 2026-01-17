@@ -9,6 +9,9 @@
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Google Charts -->
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
 </head>
 <body>
   <header class="topbar">
@@ -16,18 +19,19 @@
       <h1>Smart Garage</h1>
       <div class="muted">
         Uređaj: <b id="deviceId"><%= deviceId %></b>
+        <% if (name || place) { %>
+          <span> • <%= name %> <%= place ? "(" + place + ")" : "" %></span>
+        <% } %>
       </div>
-
-      <% if (typeof username !== "undefined" && username) { %>
-        <div class="muted small" style="margin-top:6px;">
-          Ulogovan: <b><%= username %></b>
-          · <a href="/devices">Moji uređaji</a>
-          · <a href="/logout">Logout</a>
-        </div>
+      <% if (description) { %>
+        <div class="muted small"><%= description %></div>
       <% } %>
     </div>
-
-    <div class="badge" id="statusBadge">Nema podataka</div>
+    <div style="display:flex; gap:12px; align-items:center;">
+      <a class="btn" href="/devices">Moji uređaji</a>
+      <a class="btn" href="/logout">Logout</a>
+      <div class="badge" id="statusBadge">Nema podataka</div>
+    </div>
   </header>
 
   <main class="grid">
@@ -47,36 +51,36 @@
 
     <section class="card">
       <h2>Kontrole</h2>
-
       <div class="kv" style="grid-template-columns: 1fr;">
         <button class="btn" id="btnOpen">Otvori vrata</button>
         <button class="btn" id="btnClose">Zatvori vrata</button>
-
         <div style="height:10px"></div>
-
         <button class="btn" id="btnLedOn">LED ON</button>
         <button class="btn" id="btnLedOff">LED OFF</button>
       </div>
-
       <div class="muted small">Komande idu na uređaj (Pico) preko servera.</div>
     </section>
 
     <section class="card">
-      <h2>Lokacija (demo)</h2>
+      <h2>Lokacija</h2>
       <div id="map"></div>
-      <div class="muted small">Pin je za sada fiksan; kasnije dodajemo više uređaja.</div>
+      <div class="muted small">Lokacija je ona koju si unela/uhvatila sa telefona pri registraciji uređaja.</div>
+    </section>
+
+    <section class="card">
+      <h2>Istorija (chart)</h2>
+      <div id="chart" style="width:100%; height:320px;"></div>
+      <div class="muted small">Primer: poslednjih 200 poruka (distance_cm).</div>
     </section>
   </main>
 
-  <!-- SAFE config injection -->
   <script>
-    window.__CFG__ = <%- JSON.stringify({
-      deviceId: deviceId,
-      lat: lat,
-      lng: lng
-    }) %>;
+    window.__CFG__ = {
+      deviceId: "<%= deviceId %>",
+      lat: <%= lat %>,
+      lng: <%= lng %>
+    };
   </script>
-
   <script src="/app.js"></script>
 </body>
 </html>

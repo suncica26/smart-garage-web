@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="sr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Moji uređaji</title>
+  <link rel="stylesheet" href="/style.css" />
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    #mapAll { height: 360px; border-radius: 14px; overflow: hidden; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { padding:10px; border-bottom: 1px solid rgba(255,255,255,0.08); text-align:left; }
+    a { color: #b9d7ff; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Moji uređaji</h1>
+      <div class="muted">Ulogovan: <b><%= username %></b></div>
+    </div>
+    <div style="display:flex; gap:12px; align-items:center;">
+      <a class="btn" href="/devices/new">+ Dodaj uređaj</a>
+      <a class="btn" href="/logout">Logout</a>
+    </div>
+  </header>
+
+  <main class="grid" style="grid-template-columns: 1fr;">
+    <section class="card">
+      <h2>Mapa (OpenStreetMap)</h2>
+      <div id="mapAll"></div>
+      <div class="muted small">Pinovi se uzimaju iz uređaja koje si registrovala.</div>
+    </section>
+
+    <section class="card">
+      <h2>Lista uređaja</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Naziv</th>
+            <th>Mesto</th>
+            <th>deviceId</th>
+            <th>Lokacija</th>
+            <th>Detalj</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% devices.forEach(d => { %>
+            <tr>
+              <td><%= d.name || "" %></td>
+              <td><%= d.place || "" %></td>
+              <td><%= d.deviceId %></td>
+              <td><%= (d.lat ?? "—") %>, <%= (d.lng ?? "—") %></td>
+              <td><a href="/devices/<%= encodeURIComponent(d.deviceId) %>">Otvori</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    window.__DEVICES__ = <%- JSON.stringify(devices || []) %>;
+  </script>
+
+  <script>
+    (function initAllMap(){
+      if (!window.L) return;
+
+      const list = (window.__DEVICES__ || []).filter(d => typeof d.lat === "number" && typeof d.lng === "number");
+      const fallback = [44.815313, 20.459812];
+
+      const center = list.length
+        ? [ list[0].lat, list[0].lng ]
+        : fallback;
+
+      const map = L.map("mapAll").setView(center, 12);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors',
+      }).addTo(map);
+
+      list.forEach(d => {
+        const url = "/devices/" + encodeURIComponent(d.deviceId);
+        L.marker([d.lat, d.lng]).addTo(map)
+          .bindPopup(`<b>${(d.name || d.deviceId)}</b><br/>${(d.place||"")}<br/><a href="${url}">Otvori</a>`);
+      });
+
+      setTimeout(() => map.invalidateSize(), 200);
+    })();
+  </script>
+</body>
+</html>

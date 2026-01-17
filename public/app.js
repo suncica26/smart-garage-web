@@ -19,7 +19,7 @@ function fmt(v, suffix = "") {
 }
 
 /* =========================
-   LEAFLET MAP INIT (DEMO)
+   LEAFLET MAP INIT
    ========================= */
 let map, marker;
 
@@ -37,11 +37,7 @@ function initMap() {
     attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
 
-  marker = L.marker([lat, lng])
-    .addTo(map)
-    .bindPopup(`Uređaj: ${deviceId}`)
-    .openPopup();
-
+  marker = L.marker([lat, lng]).addTo(map).bindPopup(`Uređaj: ${deviceId}`).openPopup();
   setTimeout(() => map.invalidateSize(), 200);
 }
 
@@ -52,41 +48,16 @@ if (document.readyState === "loading") {
 }
 
 /* =========================
-   SAFE JSON helper
-   ========================= */
-async function safeJson(r) {
-  const ct = r.headers.get("content-type") || "";
-  if (!ct.includes("application/json")) return null;
-  try {
-    return await r.json();
-  } catch {
-    return null;
-  }
-}
-
-/* =========================
    TELEMETRY REFRESH
    ========================= */
 async function refresh() {
   try {
-    const r = await fetch(`/api/telemetry/${encodeURIComponent(deviceId)}`, {
-      credentials: "include", // bitno za session cookie
-    });
-
-    // Ako nisi ulogovana -> preusmeri na /login ili pokaži poruku
+    const r = await fetch(`/api/telemetry/${encodeURIComponent(deviceId)}`);
     if (r.status === 401) {
-      setBadge(false, "Uloguj se");
-      // opciono: automatski preusmeri
-      // window.location.href = "/login";
+      setBadge(false, "Nisi ulogovana");
       return;
     }
-
-    if (!r.ok) {
-      setBadge(false, `Greška (${r.status})`);
-      return;
-    }
-
-    const data = await safeJson(r);
+    const data = await r.json();
 
     if (!data) {
       setBadge(false, "Nema podataka");
@@ -120,31 +91,60 @@ setInterval(refresh, 1000);
    ========================= */
 async function sendCmd(cmd) {
   try {
-    const r = await fetch(`/api/cmd/${encodeURIComponent(deviceId)}`, {
+    await fetch(`/api/cmd/${encodeURIComponent(deviceId)}`, {
       method: "POST",
-      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cmd }),
     });
-
-    if (r.status === 401) {
-      setBadge(false, "Uloguj se");
-      return;
-    }
-
-    if (!r.ok) {
-      setBadge(false, `Cmd greška (${r.status})`);
-      return;
-    }
-
-    // možeš i kratko “potvrđeno”
-    setBadge(true, "Komanda poslata");
-  } catch (e) {
-    setBadge(false, "Cmd greška");
-  }
+  } catch (e) {}
 }
 
 el("btnOpen")?.addEventListener("click", () => sendCmd("OPEN"));
 el("btnClose")?.addEventListener("click", () => sendCmd("CLOSE"));
 el("btnLedOn")?.addEventListener("click", () => sendCmd("LED_ON"));
 el("btnLedOff")?.addEventListener("click", () => sendCmd("LED_OFF"));
+
+/* =========================
+   GOOGLE CHARTS (HISTORY)
+   ========================= */
+async function drawChart() {
+  const chartEl = el("chart");
+  if (!chartEl || !window.google?.charts) return;
+
+  try {
+    const r = await fetch(`/api/events/${encodeURIComponent(deviceId)}?limit=200`);
+    if (r.status === 401) return;
+    const items = await r.json();
+
+    // items: [{ ts, payload: { distance_cm, ... }}, ...]
+    const rows = (items || [])
+      .map((it) => {
+        const t = new Date(it.ts);
+        const v = it?.payload?.distance_cm;
+        return [t, typeof v === "number" ? v : Number(v)];
+      })
+      .filter((x) => x[0] instanceof Date && !Number.isNaN(x[1]))
+      .reverse();
+
+    const data = new google.visualization.DataTable();
+    data.addColumn("datetime", "Time");
+    data.addColumn("number", "distance_cm");
+    data.addRows(rows);
+
+    const options = {
+      legend: { position: "none" },
+      hAxis: { title: "Vreme" },
+      vAxis: { title: "Distance (cm)" },
+      chartArea: { left: 50, top: 20, right: 20, bottom: 50 },
+    };
+
+    const chart = new google.visualization.LineChart(chartEl);
+    chart.draw(data, options);
+  } catch (e) {}
+}
+
+if (window.google?.charts) {
+  google.charts.load("current", { packages: ["corechart"] });
+  google.charts.setOnLoadCallback(drawChart);
+  setInterval(drawChart, 5000);
+}

@@ -23,10 +23,10 @@ app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
 app.use(express.json({ limit: "64kb" }));
-app.use(express.urlencoded({ extended: false })); // login/register forme
+app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, "public")));
 
-// Render je iza proxy-ja -> bitno za cookie/session
+// Render iza proxy-ja
 app.set("trust proxy", 1);
 
 app.use(
@@ -37,7 +37,8 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production", // na Render-u true
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 dana
     },
   })
 );
@@ -56,23 +57,6 @@ function requireAuthJson(req, res, next) {
   if (!req.session?.userId) return res.status(401).json({ ok: false, error: "unauthorized" });
   next();
 }
-
-function getBaseUrl(req) {
-  const envBase = process.env.BASE_URL && String(process.env.BASE_URL).trim();
-  if (envBase) return envBase.replace(/\/+$/, "");
-
-  const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
-  const host = req.headers["x-forwarded-host"] || req.get("host");
-  if (!host) return "";
-  return `${proto}://${host}`.replace(/\/+$/, "");
-}
-
-// locals za view-ove
-app.use((req, res, next) => {
-  res.locals.baseUrl = getBaseUrl(req);
-  res.locals.username = req.session?.username || null;
-  next();
-});
 
 // ===== Health check =====
 app.get("/health", async (req, res) => {
@@ -172,86 +156,22 @@ app.get("/logout", (req, res) => {
   req.session.destroy(() => res.redirect("/login"));
 });
 
-// ===== App pages =====
+// ===== Pages =====
 app.get("/", (req, res) => {
   if (!req.session?.userId) return res.redirect("/login");
   return res.redirect("/devices");
 });
 
-// Lista uređaja
+// Lista + mapa (pins)
 app.get("/devices", requireAuth, async (req, res) => {
   const ownerId = req.session.userId;
-
   const devices = await colDevices.find({ ownerId }).sort({ createdAt: -1 }).toArray();
-
-  let html = `
-  <html><head><meta charset="utf-8"><title>Moji uređaji</title></head>
-  <body style="font-family:Arial; max-width:900px; margin:30px auto;">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <h2>Moji uređaji</h2>
-      <div>
-        <span style="margin-right:10px;">${req.session.username}</span>
-        <a href="/logout">Logout</a>
-      </div>
-    </div>
-
-    <p><a href="/devices/new">+ Dodaj novi uređaj</a></p>
-    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse; width:100%;">
-      <tr>
-        <th>Naziv</th><th>Mesto</th><th>deviceId</th><th>Lokacija</th><th>Detalj</th>
-      </tr>
-  `;
-
-  for (const d of devices) {
-    html += `
-      <tr>
-        <td>${d.name || ""}</td>
-        <td>${d.place || ""}</td>
-        <td>${d.deviceId}</td>
-        <td>${(d.lat ?? "")}, ${(d.lng ?? "")}</td>
-        <td><a href="/devices/${encodeURIComponent(d.deviceId)}">Otvori</a></td>
-      </tr>
-    `;
-  }
-
-  html += `
-    </table>
-  </body></html>
-  `;
-
-  res.send(html);
+  res.render("devices", { devices, username: req.session.username });
 });
 
-// Forma za dodavanje uređaja
+// Dodavanje uređaja (QR + geolok)
 app.get("/devices/new", requireAuth, (req, res) => {
-  res.send(`
-  <html><head><meta charset="utf-8"><title>Novi uređaj</title></head>
-  <body style="font-family:Arial; max-width:520px; margin:40px auto;">
-    <h2>Dodaj uređaj</h2>
-    <form method="post" action="/devices/new">
-      <label>deviceId (sa kutije / QR)</label><br/>
-      <input name="deviceId" required style="width:100%; padding:8px"/><br/><br/>
-
-      <label>Naziv</label><br/>
-      <input name="name" style="width:100%; padding:8px"/><br/><br/>
-
-      <label>Mesto (npr. Garaža)</label><br/>
-      <input name="place" style="width:100%; padding:8px"/><br/><br/>
-
-      <label>Opis</label><br/>
-      <input name="description" style="width:100%; padding:8px"/><br/><br/>
-
-      <label>Lat</label><br/>
-      <input name="lat" style="width:100%; padding:8px"/><br/><br/>
-
-      <label>Lng</label><br/>
-      <input name="lng" style="width:100%; padding:8px"/><br/><br/>
-
-      <button style="padding:10px 14px">Sačuvaj</button>
-    </form>
-    <p><a href="/devices">Nazad</a></p>
-  </body></html>
-  `);
+  res.render("new-device", { username: req.session.username });
 });
 
 app.post("/devices/new", requireAuth, async (req, res) => {
@@ -280,7 +200,7 @@ app.post("/devices/new", requireAuth, async (req, res) => {
   res.redirect("/devices");
 });
 
-// ✅ DASHBOARD: renderuj index.ejs
+// Detalj uređaja: dashboard + chart
 app.get("/devices/:deviceId", requireAuth, async (req, res) => {
   const ownerId = req.session.userId;
   const deviceId = req.params.deviceId;
@@ -288,21 +208,20 @@ app.get("/devices/:deviceId", requireAuth, async (req, res) => {
   const dev = await colDevices.findOne({ ownerId, deviceId });
   if (!dev) return res.status(404).send("Device not found");
 
-  // lat/lng za mapu (fallback ako nema)
-  const lat = Number.isFinite(dev.lat) ? dev.lat : 44.815313;
-  const lng = Number.isFinite(dev.lng) ? dev.lng : 20.459812;
-
-  return res.render("index", {
+  res.render("index", {
     deviceId: dev.deviceId,
-    lat,
-    lng,
-    username: req.session.username, // opciono, već je i u res.locals
+    lat: dev.lat ?? 44.815313,
+    lng: dev.lng ?? 20.459812,
+    name: dev.name || "",
+    place: dev.place || "",
+    description: dev.description || "",
+    username: req.session.username,
   });
 });
 
 // ===== API (telemetry/events) =====
 
-// Pico -> server (POST telemetry)  [OPEN]
+// Pico -> server (POST telemetry) [OPEN]
 app.post("/api/telemetry/:deviceId", async (req, res) => {
   try {
     const deviceId = req.params.deviceId;
@@ -328,7 +247,6 @@ app.post("/api/telemetry/:deviceId", async (req, res) => {
       { $set: { lastTelemetry: data, lastSeenAt: new Date() } }
     );
 
-    console.log("TELEMETRY:", deviceId, data);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -336,7 +254,7 @@ app.post("/api/telemetry/:deviceId", async (req, res) => {
   }
 });
 
-// Dashboard -> server (GET latest telemetry) [AUTH]
+// Dashboard -> server (GET latest) [AUTH]
 app.get("/api/telemetry/:deviceId", requireAuthJson, async (req, res) => {
   const ownerId = req.session.userId;
   const deviceId = req.params.deviceId;
@@ -347,7 +265,7 @@ app.get("/api/telemetry/:deviceId", requireAuthJson, async (req, res) => {
   res.json(dev.lastTelemetry || null);
 });
 
-// Istorija (za chart kasnije) [AUTH]
+// Istorija (za chart) [AUTH]
 app.get("/api/events/:deviceId", requireAuthJson, async (req, res) => {
   const ownerId = req.session.userId;
   const deviceId = req.params.deviceId;
@@ -362,7 +280,7 @@ app.get("/api/events/:deviceId", requireAuthJson, async (req, res) => {
 
 // ===== CMD queue (Mongo) =====
 
-// web -> server (pošalji komandu) [AUTH]
+// web -> server (set cmd) [AUTH]
 app.post("/api/cmd/:deviceId", requireAuthJson, async (req, res) => {
   const ownerId = req.session.userId;
   const deviceId = req.params.deviceId;
@@ -372,24 +290,21 @@ app.post("/api/cmd/:deviceId", requireAuthJson, async (req, res) => {
   const dev = await colDevices.findOne({ ownerId, deviceId }, { projection: { _id: 1 } });
   if (!dev) return res.status(404).json({ ok: false, error: "device not found" });
 
-  // jedna pending komanda po uređaju (overwrite)
   await colCmd.updateOne(
     { deviceId },
     { $set: { deviceId, cmd: String(cmd), ts: new Date() } },
     { upsert: true }
   );
 
-  console.log("CMD SET:", deviceId, cmd);
   res.json({ ok: true });
 });
 
-// pico -> server (pokupi komandu) [OPEN]
+// pico -> server (consume cmd) [OPEN]
 app.get("/api/cmd/:deviceId", async (req, res) => {
   try {
     const deviceId = req.params.deviceId;
 
     const doc = await colCmd.findOneAndDelete({ deviceId });
-
     if (!doc.value) return res.json(null);
 
     res.json({
