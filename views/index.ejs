@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="sr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Smart Garage Dashboard</title>
+
+  <link rel="stylesheet" href="/style.css" />
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Smart Garage</h1>
+      <div class="muted">Uređaj: <b id="deviceId"><%= deviceId %></b></div>
+    </div>
+    <div class="badge" id="statusBadge">Nema podataka</div>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h2>Trenutno stanje</h2>
+      <div class="kv">
+        <div class="k">Door</div><div class="v" id="door">—</div>
+        <div class="k">LED</div><div class="v" id="led">—</div>
+        <div class="k">Distance (cm)</div><div class="v" id="dist">—</div>
+        <div class="k">PIR</div><div class="v" id="pir">—</div>
+        <div class="k">LDR</div><div class="v" id="ldr">—</div>
+        <div class="k">Night</div><div class="v" id="night">—</div>
+        <div class="k">t_left (ms)</div><div class="v" id="tleft">—</div>
+        <div class="k">Last update</div><div class="v" id="last">—</div>
+      </div>
+    </section>
+
+    <section class="card">
+  <h2>Kontrole</h2>
+
+  <div class="kv" style="grid-template-columns: 1fr;">
+    <button class="btn" id="btnOpen">Otvori vrata</button>
+    <button class="btn" id="btnClose">Zatvori vrata</button>
+
+    <div style="height:10px"></div>
+
+    <button class="btn" id="btnLedOn">LED ON</button>
+    <button class="btn" id="btnLedOff">LED OFF</button>
+  </div>
+
+  <div class="muted small">Komande idu na uređaj (Pico) preko servera.</div>
+</section>
+
+
+    <section class="card">
+      <h2>Lokacija (demo)</h2>
+      <div id="map"></div>
+      <div class="muted small">Pin je za sada fiksan; kasnije dodajemo više uređaja.</div>
+    </section>
+  </main>
+
+  <script>
+    window.__CFG__ = {
+      deviceId: "<%= deviceId %>",
+      lat: <%= lat %>,
+      lng: <%= lng %>
+    };
+  </script>
+  <script src="/app.js"></script>
+</body>
+</html>
